@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>F.R.I.D.A.Y.</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Space+Mono:wght@400;700&display=swap');
+
+  :root{
+    --cyan: #3fd4ff;
+    --cyan-bright: #9fecff;
+    --cyan-dim: #1a5a70;
+    --bg: #050a0f;
+    --bg2: #0a141c;
+    --line: #14313d;
+    --text: #d6f2fb;
+    --muted: #4f7c8c;
+    --danger: #ff5d5d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; height:100%;
+    background:
+      radial-gradient(ellipse at 50% 30%, #0d1e28 0%, var(--bg) 65%);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    overflow:hidden;
+  }
+  #app{
+    height:100%; display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+    padding: 14px 14px 12px; position:relative;
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar{ width:100%; display:flex; align-items:center; justify-content:space-between; }
+  .brand{
+    font-family:'Orbitron',sans-serif; font-weight:800; letter-spacing:5px;
+    font-size:14px; color:var(--cyan-bright); text-shadow:0 0 12px rgba(63,212,255,.7);
+  }
+  .badges{ display:flex; gap:6px; }
+  .badge{
+    font-family:'Orbitron',sans-serif; font-size:8px; letter-spacing:1.5px;
+    border:1px solid var(--cyan-dim); color:var(--cyan); padding:3px 7px; border-radius:3px;
+    background:rgba(63,212,255,.05);
+  }
+  .badge.on{ color:#7bffb0; border-color:#1a5a3a; box-shadow:0 0 6px rgba(123,255,176,.4);}
+  .clock{ font-size:10px; color:var(--muted); letter-spacing:1px; margin-top:2px;}
+
+  /* ---------- telemetry grid ---------- */
+  .telemetry{
+    width:100%; max-width:460px; display:grid; grid-template-columns:repeat(3,1fr); gap:6px;
+    margin-top:10px;
+  }
+  .tcell{
+    border:1px solid var(--line); border-radius:4px; padding:6px 8px; background:rgba(63,212,255,.03);
+  }
+  .tcell label{ display:block; font-family:'Orbitron',sans-serif; font-size:7px; letter-spacing:1.5px; color:var(--muted);}
+  .tcell .val{ font-size:13px; color:var(--cyan-bright); font-weight:700; margin-top:2px;}
+  .tcell .bar{ height:2px; background:var(--line); margin-top:5px; border-radius:2px; overflow:hidden;}
+  .tcell .bar i{ display:block; height:100%; background:var(--cyan); box-shadow:0 0 6px var(--cyan); transition:width .3s ease;}
+
+  /* ---------- central stage ---------- */
+  .stage{ position:relative; width:min(240px, 52vw); aspect-ratio:1/1; margin: 16px 0 10px; }
+  canvas#particleCanvas{ position:absolute; inset:0; width:100%; height:100%; }
+  .ring{ position:absolute; border-radius:50%; border:1px dashed var(--cyan-dim); opacity:.55; }
+  .ring.r1{ inset:-4px; }
+  .ring.r2{ inset:16px; opacity:.35; border-style:solid; border-width:1px;}
+  .ring.r3{ inset:34px; opacity:.7; }
+  .crosshair{ position:absolute; inset:0; pointer-events:none; }
+  .crosshair::before, .crosshair::after{
+    content:''; position:absolute; background:var(--cyan-dim); opacity:.5;
+  }
+  .crosshair::before{ left:50%; top:-8px; bottom:-8px; width:1px; transform:translateX(-50%);}
+  .crosshair::after{ top:50%; left:-8px; right:-8px; height:1px; transform:translateY(-50%);}
+
+  #app.idle .stage{ filter:saturate(.4) brightness(.55); }
+  #app.armed .stage{ filter:saturate(1) brightness(1.05); }
+  #app.awake .stage, #app.thinking .stage{ filter:saturate(1.15) brightness(1.15); }
+  #app.speaking .stage{ filter:saturate(1.3) brightness(1.3); }
+
+  /* ---------- status readout ---------- */
+  .status{ font-family:'Orbitron',sans-serif; font-size:12px; letter-spacing:3px; color:var(--cyan-bright); min-height:16px; text-align:center;}
+  .sub{ font-size:10.5px; color:var(--muted); margin-top:4px; text-align:center; max-width:320px; line-height:1.5;}
+
+  /* ---------- session readout bar ---------- */
+  .session-bar{
+    width:100%; max-width:460px; display:flex; justify-content:space-between; align-items:center;
+    border:1px solid var(--line); border-radius:5px; padding:7px 12px; margin-top:10px;
+    background:rgba(63,212,255,.03);
+  }
+  .session-bar .item{ text-align:center; flex:1; }
+  .session-bar label{ display:block; font-family:'Orbitron',sans-serif; font-size:7px; letter-spacing:1.5px; color:var(--muted);}
+  .session-bar .v{ font-size:12px; color:var(--cyan-bright); margin-top:2px; }
+  .session-bar .sep{ width:1px; height:22px; background:var(--line);}
+
+  /* ---------- transcript ---------- */
+  .transcript{
+    width:100%; max-width:460px; flex:1; min-height:0; overflow-y:auto; margin-top:12px;
+    border-top:1px solid var(--line); padding-top:10px;
+  }
+  .line{ font-size:12px; line-height:1.55; margin-bottom:9px; padding-left:9px; border-left:2px solid var(--line); }
+  .line.you{ color:#bcd8e0; border-left-color:var(--muted);}
+  .line.friday{ color:var(--cyan-bright); border-left-color:var(--cyan);}
+  .line b{ font-family:'Orbitron',sans-serif; font-size:8px; letter-spacing:2px; display:block; margin-bottom:2px; opacity:.7;}
+
+  .controls{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; justify-content:center;}
+  button{
+    font-family:'Orbitron',sans-serif; font-size:9px; letter-spacing:2px;
+    background:transparent; border:1px solid var(--cyan-dim); color:var(--cyan-bright);
+    padding:9px 14px; border-radius:4px; cursor:pointer; transition:.2s;
+  }
+  button:hover{ background:rgba(63,212,255,.12); border-color:var(--cyan);}
+  button:active{ transform:scale(.97);}
+  button.danger{ border-color:#5a2222; color:#ff8a8a;}
+
+  #startOverlay{
+    position:absolute; inset:0; background:var(--bg); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:16px; text-align:center; padding:30px; z-index:10;
+  }
+  #startOverlay p{ color:var(--muted); font-size:12px; max-width:320px; line-height:1.6;}
+  .err{ color:var(--danger); font-size:11px; max-width:320px; text-align:center; margin-top:10px; display:none;}
+  #apiKeyInput{
+    width:100%; max-width:300px; background:var(--bg2); border:1px solid var(--cyan-dim); color:var(--text);
+    font-family:'Space Mono',monospace; font-size:12px; padding:10px 12px; border-radius:4px; outline:none;
+  }
+  #apiKeyInput:focus{ border-color:var(--cyan); }
+  .voicerow{ width:100%; max-width:300px; display:flex; align-items:center; gap:8px; }
+  .voicerow label{ font-family:'Orbitron',sans-serif; font-size:9px; letter-spacing:1.5px; color:var(--muted); white-space:nowrap;}
+  #voiceSelect{
+    flex:1; background:var(--bg2); border:1px solid var(--cyan-dim); color:var(--text);
+    font-family:'Space Mono',monospace; font-size:11px; padding:8px; border-radius:4px; outline:none;
+  }
+  .keynote{ font-size:9.5px; color:var(--muted); max-width:300px; line-height:1.5; opacity:.8;}
+  .gear{
+    position:absolute; top:14px; right:14px; z-index:5; width:30px; height:30px; border-radius:50%;
+    background:rgba(63,212,255,.06); border:1px solid var(--cyan-dim); color:var(--cyan-bright);
+    font-size:14px; display:flex; align-items:center; justify-content:center; padding:0;
+  }
+</style>
+</head>
+<body>
+<div id="app" class="idle">
+
+  <div id="startOverlay">
+    <div class="brand">F.R.I.D.A.Y.</div>
+    <p>Needs microphone access, plus a free Google AI Studio key so it can actually think and answer. Get one at <b>aistudio.google.com/apikey</b> — free, no credit card needed.</p>
+    <input type="password" id="apiKeyInput" placeholder="AIza... (your free Google API key)" autocomplete="off">
+    <div class="voicerow">
+      <label for="voiceSelect">Voice</label>
+      <select id="voiceSelect"><option>Loading voices...</option></select>
+    </div>
+    <button id="startBtn">INITIALIZE</button>
+    <div class="err" id="startErr"></div>
+    <div class="keynote">Your key is stored only on this device (never sent anywhere but Google's API) — don't share your live site link publicly since anyone with it could use your key.</div>
+  </div>
+
+  <button id="settingsBtn" class="gear">⚙</button>
+
+  <div class="topbar">
+    <div>
+      <div class="brand">F.R.I.D.A.Y.</div>
+      <div class="clock" id="clockDisplay">--:--:--</div>
+    </div>
+    <div class="badges">
+      <div class="badge on" id="badgeOnline">ONLINE</div>
+      <div class="badge">SECURE</div>
+      <div class="badge">ENCRYPTED</div>
+    </div>
+  </div>
+
+  <div class="telemetry">
+    <div class="tcell"><label>MIC LEVEL</label><div class="val" id="statMic">0%</div><div class="bar"><i id="barMic" style="width:0%"></i></div></div>
+    <div class="tcell"><label>NEURAL SYNC</label><div class="val" id="statNeural">98%</div><div class="bar"><i id="barNeural" style="width:98%"></i></div></div>
+    <div class="tcell"><label>LATENCY</label><div class="val" id="statLatency">-- ms</div><div class="bar"><i id="barLatency" style="width:10%"></i></div></div>
+    <div class="tcell"><label>UPTIME</label><div class="val" id="statUptime">00:00:00</div><div class="bar"><i style="width:100%"></i></div></div>
+    <div class="tcell"><label>REQUESTS</label><div class="val" id="statRequests">0</div><div class="bar"><i id="barRequests" style="width:0%"></i></div></div>
+    <div class="tcell"><label>SIGNAL</label><div class="val" id="statSignal">STANDBY</div><div class="bar"><i id="barSignal" style="width:15%"></i></div></div>
+  </div>
+
+  <div class="stage">
+    <div class="ring r1"></div>
+    <div class="ring r2"></div>
+    <div class="ring r3"></div>
+    <canvas id="particleCanvas"></canvas>
+    <div class="crosshair"></div>
+  </div>
+
+  <div class="status" id="statusText">STANDBY</div>
+  <div class="sub" id="subText">Clap twice to arm the wake listener.</div>
+
+  <div class="session-bar">
+    <div class="item"><label>MODE</label><div class="v" id="sessMode">IDLE</div></div>
+    <div class="sep"></div>
+    <div class="item"><label>SESSION Q's</label><div class="v" id="sessQ">0</div></div>
+    <div class="sep"></div>
+    <div class="item"><label>VOICE</label><div class="v" id="sessVoice">TTS</div></div>
+  </div>
+
+  <div class="transcript" id="transcript"></div>
+
+  <div class="controls">
+    <button id="armBtn">SIMULATE CLAP</button>
+    <button id="stopBtn" class="danger">SLEEP</button>
+  </div>
+</div>
+
+<script>
+const app = document.getElementById('app');
+const statusText = document.getElementById('statusText');
+const subText = document.getElementById('subText');
+const transcript = document.getElementById('transcript');
+const startOverlay = document.getElementById('startOverlay');
+const startBtn = document.getElementById('startBtn');
+const startErr = document.getElementById('startErr');
+const armBtn = document.getElementById('armBtn');
+const stopBtn = document.getElementById('stopBtn');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const voiceSelect = document.getElementById('voiceSelect');
+const settingsBtn = document.getElementById('settingsBtn');
+const sessVoice = document.getElementById('sessVoice');
+
+let apiKey = localStorage.getItem('friday_api_key') || '';
+let selectedVoiceURI = localStorage.getItem('friday_voice_uri') || '';
+apiKeyInput.value = apiKey;
+
+// ---------- voice setup ----------
+function scoreVoice(v){
+  // Prefer higher-quality on-device voices over the generic default
+  let score = 0;
+  const n = v.name.toLowerCase();
+  if(/natural|neural|enhanced|wavenet|premium/.test(n)) score += 5;
+  if(/google/.test(n)) score += 2;
+  if(v.lang === 'en-US') score += 2;
+  if(v.lang && v.lang.startsWith('en')) score += 1;
+  if(/female|zira|samantha|victoria|aria|jenny/.test(n)) score += 1;
+  return score;
+}
+
+function populateVoices(){
+  const voices = window.speechSynthesis.getVoices().filter(v => v.lang && v.lang.startsWith('en'));
+  if(!voices.length) return;
+  voices.sort((a,b)=> scoreVoice(b) - scoreVoice(a));
+  voiceSelect.innerHTML = '';
+  voices.forEach(v=>{
+    const opt = document.createElement('option');
+    opt.value = v.voiceURI;
+    opt.textContent = v.name + (v.lang !== 'en-US' ? ` (${v.lang})` : '');
+    voiceSelect.appendChild(opt);
+  });
+  // restore saved choice, else pick the best-scoring voice automatically
+  if(selectedVoiceURI && voices.some(v=>v.voiceURI === selectedVoiceURI)){
+    voiceSelect.value = selectedVoiceURI;
+  } else {
+    selectedVoiceURI = voices[0].voiceURI;
+    voiceSelect.value = selectedVoiceURI;
+  }
+  sessVoice.textContent = (voiceSelect.selectedOptions[0]?.textContent || 'TTS').split(' ')[0].toUpperCase();
+}
+window.speechSynthesis.onvoiceschanged = populateVoices;
+populateVoices();
+
+voiceSelect.addEventListener('change', ()=>{
+  selectedVoiceURI = voiceSelect.value;
+  localStorage.setItem('friday_voice_uri', selectedVoiceURI);
+  sessVoice.textContent = (voiceSelect.selectedOptions[0]?.textContent || 'TTS').split(' ')[0].toUpperCase();
+  speak("Hi boss, this is how I sound now.");
+});
+
+settingsBtn.addEventListener('click', ()=>{
+  apiKeyInput.value = apiKey;
+  startOverlay.style.display = 'flex';
+});
+
+// telemetry DOM
+const statMic = document.getElementById('statMic');
+const barMic = document.getElementById('barMic');
+const statLatency = document.getElementById('statLatency');
+const barLatency = document.getElementById('barLatency');
+const statUptime = document.getElementById('statUptime');
+const statRequests = document.getElementById('statRequests');
+const barRequests = document.getElementById('barRequests');
+const statSignal = document.getElementById('statSignal');
+const barSignal = document.getElementById('barSignal');
+const statNeural = document.getElementById('statNeural');
+const barNeural = document.getElementById('barNeural');
+const clockDisplay = document.getElementById('clockDisplay');
+const sessMode = document.getElementById('sessMode');
+const sessQ = document.getElementById('sessQ');
+
+let audioCtx, analyser, micStream, dataArray;
+let recognition = null;
+let state = 'idle'; // idle -> armed -> awake -> thinking -> speaking -> back to armed/idle
+let clapCount = 0;
+let clapTimer = null;
+let armWindowTimer = null;
+const CLAP_THRESHOLD = 0.35;
+const CLAP_COOLDOWN_MS = 250;
+let lastClapAt = 0;
+let sessionStart = null;
+let requestCount = 0;
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+let micActive = false; // whether the clap-detection mic stream is currently live
+
+function setState(s, statusLabel, subLabel){
+  const prevState = state;
+  state = s;
+  app.className = s;
+  if(statusLabel) statusText.textContent = statusLabel;
+  if(subLabel) subText.textContent = subLabel;
+  statSignal.textContent = s.toUpperCase();
+  sessMode.textContent = s.toUpperCase();
+  const sigPct = { idle:15, armed:45, awake:70, thinking:85, speaking:100 }[s] ?? 15;
+  barSignal.style.width = sigPct + '%';
+
+  // Free the clap-detection mic before voice recognition needs it, and
+  // give it back once we're idle again — on many Android devices the two
+  // can't hold the mic at the same time, which silently breaks recognition.
+  if(s === 'idle' && prevState !== 'idle'){
+    reacquireMicForClap();
+  } else if(s !== 'idle' && prevState === 'idle'){
+    releaseMicForRecognition();
+  }
+}
+
+function addLine(who, text){
+  const div = document.createElement('div');
+  div.className = 'line ' + (who === 'friday' ? 'friday' : 'you');
+  div.innerHTML = '<b>' + (who === 'friday' ? 'FRIDAY' : 'YOU') + '</b>' + escapeHtml(text);
+  transcript.appendChild(div);
+  transcript.scrollTop = transcript.scrollHeight;
+}
+function escapeHtml(s){
+  const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+}
+
+function speak(text, onEnd){
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 0.98; utter.pitch = 1.03;
+  const voices = window.speechSynthesis.getVoices();
+  let chosen = voices.find(v => v.voiceURI === selectedVoiceURI);
+  if(!chosen){
+    const enVoices = voices.filter(v => v.lang && v.lang.startsWith('en'));
+    enVoices.sort((a,b)=> scoreVoice(b) - scoreVoice(a));
+    chosen = enVoices[0] || voices[0];
+  }
+  if(chosen) utter.voice = chosen;
+  utter.onend = () => { if(onEnd) onEnd(); };
+  window.speechSynthesis.speak(utter);
+}
+
+// ---------- clock + uptime ----------
+function tickClock(){
+  const now = new Date();
+  clockDisplay.textContent = now.toLocaleTimeString('en-US', { hour12:false });
+  if(sessionStart){
+    const secs = Math.floor((Date.now() - sessionStart)/1000);
+    const h = String(Math.floor(secs/3600)).padStart(2,'0');
+    const m = String(Math.floor((secs%3600)/60)).padStart(2,'0');
+    const s = String(secs%60).padStart(2,'0');
+    statUptime.textContent = `${h}:${m}:${s}`;
+  }
+  // gentle ambient flicker for neural sync flavor stat
+  const flick = 94 + Math.round(Math.sin(Date.now()/4000)*3) + Math.round(Math.random()*2);
+  statNeural.textContent = flick + '%';
+  barNeural.style.width = flick + '%';
+}
+setInterval(tickClock, 1000);
+
+// ---------- Microphone + clap detection ----------
+async function initMic(){
+  await reacquireMicForClap();
+  sessionStart = Date.now();
+  requestAnimationFrame(monitorAudio);
+}
+
+function releaseMicForRecognition(){
+  if(micStream){
+    micStream.getTracks().forEach(t=>{ try{ t.stop(); }catch(e){} });
+    micStream = null;
+  }
+  analyser = null; // monitorAudio() skips peak reads while this is null
+  micActive = false;
+}
+
+async function reacquireMicForClap(){
+  if(micActive) return;
+  try{
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if(!audioCtx || audioCtx.state === 'closed'){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if(audioCtx.state === 'suspended') await audioCtx.resume();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    const src = audioCtx.createMediaStreamSource(micStream);
+    src.connect(analyser);
+    dataArray = new Uint8Array(analyser.fftSize);
+    micActive = true;
+  }catch(e){
+    console.error('mic reacquire failed', e);
+  }
+}
+
+function monitorAudio(){
+  if(analyser){
+    analyser.getByteTimeDomainData(dataArray);
+    let peak = 0;
+    for(let i=0;i<dataArray.length;i++){
+      const v = Math.abs(dataArray[i]-128)/128;
+      if(v>peak) peak = v;
+    }
+    const pct = Math.min(100, Math.round(peak*140));
+    statMic.textContent = pct + '%';
+    barMic.style.width = pct + '%';
+    micLevelForVisual = peak;
+
+    if(peak > CLAP_THRESHOLD){
+      const now = Date.now();
+      if(now - lastClapAt > CLAP_COOLDOWN_MS){
+        lastClapAt = now;
+        registerClap();
+      }
+    }
+  }
+  requestAnimationFrame(monitorAudio);
+}
+
+function registerClap(){
+  if(state !== 'idle') return;
+  clapCount++;
+  clearTimeout(clapTimer);
+  clapTimer = setTimeout(()=>{ clapCount = 0; }, 900);
+  if(clapCount >= 2){
+    clapCount = 0;
+    armListening();
+  }
+}
+
+function armListening(){
+  wakeRetries = 0;
+  setState('armed', 'ARMED', 'Listening for "Wake up Friday"...');
+  setTimeout(startWakeRecognition, 200);
+  clearTimeout(armWindowTimer);
+  armWindowTimer = setTimeout(()=>{
+    if(state === 'armed'){
+      stopRecognitionSafely();
+      setState('speaking', 'SPEAKING', '');
+      speak("Still didn't catch it, boss. Clap twice whenever you're ready to try again.", ()=>{
+        setState('idle', 'STANDBY', 'Clap twice to arm the wake listener.');
+      });
+    }
+  }, 12000);
+}
+
+// ---------- Speech recognition ----------
+let wakeRetries = 0;
+const MAX_WAKE_RETRIES = 3;
+
+function startWakeRecognition(){
+  if(!SpeechRecognition) return;
+  stopRecognitionSafely();
+  recognition = new SpeechRecognition();
+  recognition.lang = 'en-US';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.onstart = ()=>{
+    if(state === 'armed') subText.textContent = 'Mic live — say "Wake up Friday" now...';
+  };
+  recognition.onresult = (e)=>{
+    const said = e.results[0][0].transcript.toLowerCase();
+    addLine('you', said);
+    if(said.includes('friday')){
+      clearTimeout(armWindowTimer);
+      wakeUp();
+    } else {
+      clearTimeout(armWindowTimer);
+      setState('speaking', 'SPEAKING', '');
+      speak("That's not it, boss. Try again.", ()=>{
+        setState('idle', 'STANDBY', 'Clap twice to arm the wake listener.');
+      });
+    }
+  };
+  recognition.onerror = (e)=>{
+    if(state !== 'armed') return;
+    if(wakeRetries < MAX_WAKE_RETRIES){
+      wakeRetries++;
+      setTimeout(()=>{ if(state === 'armed') startWakeRecognition(); }, 300);
+    } else {
+      clearTimeout(armWindowTimer);
+      setState('speaking', 'SPEAKING', '');
+      speak("I didn't hear anything, boss. Clap again when you're ready.", ()=>{
+        setState('idle', 'STANDBY', 'Clap twice to arm the wake listener.');
+      });
+    }
+  };
+  recognition.onend = ()=>{};
+  try{
+    recognition.start();
+  }catch(startErr){
+    // start() can throw synchronously if recognition is already active or mic is busy
+    if(wakeRetries < MAX_WAKE_RETRIES){
+      wakeRetries++;
+      setTimeout(()=>{ if(state === 'armed') startWakeRecognition(); }, 400);
+    } else {
+      clearTimeout(armWindowTimer);
+      setState('speaking', 'SPEAKING', '');
+      speak("My microphone seems busy, boss. Try closing other apps using the mic and clap again.", ()=>{
+        setState('idle', 'STANDBY', 'Clap twice to arm the wake listener.');
+      });
+    }
+  }
+}
+
+function getTimeGreeting(){
+  const hour = new Date().getHours();
+  if(hour >= 5 && hour < 12) return "Good morning, boss. How's your morning going?";
+  if(hour >= 12 && hour < 17) return "Good afternoon, boss. How's your day going?";
+  if(hour >= 17 && hour < 22) return "Good evening, boss. How's your evening going?";
+  return "You're up late, boss. How's it going?";
+}
+
+function wakeUp(){
+  const greeting = getTimeGreeting();
+  setState('awake', 'ONLINE', greeting);
+  addLine('friday', greeting);
+  setState('speaking', 'SPEAKING', '');
+  speak(greeting, ()=>{
+    listenForQuestion();
+  });
+}
+
+function listenForQuestion(){
+  if(!SpeechRecognition){
+    setState('idle','STANDBY','Speech recognition unavailable in this browser.');
+    return;
+  }
+  setState('awake', 'LISTENING', 'Ask me anything...');
+  stopRecognitionSafely();
+  recognition = new SpeechRecognition();
+  recognition.lang = 'en-US';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.onresult = async (e)=>{
+    const question = e.results[0][0].transcript;
+    addLine('you', question);
+    if(/^(go to sleep|sleep|goodnight|stop listening|that's all|nothing else)/i.test(question.trim())){
+      farewell();
+      return;
+    }
+    await handleQuestion(question);
+  };
+  recognition.onerror = (e)=>{
+    if(state === 'awake'){
+      setState('idle', 'STANDBY', 'Clap twice to arm the wake listener.');
+    }
+  };
+  recognition.start();
+}
+
+function farewell(){
+  setState('speaking', 'SPEAKING', '');
+  const bye = "Going back to standby, boss.";
+  addLine('friday', bye);
+  speak(bye, ()=>{
+    conversationHistory = [];
+    setState('idle', 'STANDBY', 'Clap twice to arm the wake listener.');
+  });
+}
+
+function stopRecognitionSafely(){
+  if(recognition){
+    try{ recognition.onresult=null; recognition.onerror=null; recognition.onend=null; recognition.stop(); }catch(e){}
+    recognition = null;
+  }
+}
+
+function buildSystemPrompt(){
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  const timeStr = now.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+  return `You are FRIDAY, a witty, warm AI assistant (like the one from Iron Man). Address the user as 'boss'. Right now it is ${dateStr}, ${timeStr} in the user's local time. You're having a real spoken conversation, so:
+- Keep normal chat answers short: 1-3 spoken sentences, natural and conversational, plain text only, no markdown, no lists, no headers, no emojis.
+- Remember what was said earlier in this conversation and refer back to it naturally when relevant.
+- If the user asks about news, current events, sports scores, or anything happening "right now", be upfront that you're not able to browse live results in this setup — give your best answer from what you know, but say plainly if something may be outdated rather than guessing at a live number.
+- If the user asks a follow-up like "tell me more" or "what about the second one", use the conversation history to know what they mean.`;
+}
+
+// ---------- Answering via Gemini (free tier, no billing required) ----------
+let conversationHistory = []; // Gemini format: [{role:'user'|'model', parts:[{text}]}]
+const MAX_TURNS = 16;
+const GEMINI_MODEL = "gemini-3.5-flash";
+
+async function handleQuestion(question){
+  if(!apiKey){
+    setState('speaking', 'SPEAKING', '');
+    const msg = "Boss, I don't have an API key yet. Tap the gear icon top right and add one.";
+    addLine('friday', msg);
+    speak(msg, ()=> listenForQuestion());
+    return;
+  }
+  setState('thinking', 'THINKING', '');
+  conversationHistory.push({ role: 'user', parts: [{ text: question }] });
+  if(conversationHistory.length > MAX_TURNS) conversationHistory = conversationHistory.slice(-MAX_TURNS);
+  const t0 = performance.now();
+  try{
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: conversationHistory,
+        systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
+        generationConfig: { maxOutputTokens: 400 }
+      })
+    });
+
+    if(!response.ok){
+      const errData = await response.json().catch(()=>({}));
+      const errMsg = errData?.error?.message || `HTTP ${response.status}`;
+      conversationHistory.pop(); // don't keep the failed turn in history
+      let spoken;
+      if(response.status === 400 && /API key/i.test(errMsg)){
+        spoken = "That API key isn't working, boss. Check it in settings.";
+      } else if(response.status === 429){
+        spoken = "I'm being rate limited, boss. Give it a moment and try again.";
+      } else {
+        spoken = "Something went wrong on my end, boss: " + errMsg;
+      }
+      addLine('friday', spoken);
+      setState('speaking', 'SPEAKING', '');
+      speak(spoken, ()=> listenForQuestion());
+      return;
+    }
+
+    const data = await response.json();
+    const latencyMs = Math.round(performance.now() - t0);
+    statLatency.textContent = latencyMs + ' ms';
+    barLatency.style.width = Math.min(100, latencyMs/50) + '%';
+    requestCount++;
+    statRequests.textContent = requestCount;
+    barRequests.style.width = Math.min(100, requestCount*8) + '%';
+    sessQ.textContent = requestCount;
+
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const answer = parts.map(p => p.text || '').join(' ').trim()
+      || "Sorry boss, I couldn't find an answer to that.";
+    conversationHistory.push({ role: 'model', parts: [{ text: answer }] });
+    addLine('friday', answer);
+    setState('speaking', 'SPEAKING', '');
+    speak(answer, ()=>{
+      listenForQuestion();
+    });
+  }catch(err){
+    const msg = "Sorry boss, I hit a snag reaching my brain.";
+    addLine('friday', msg);
+    setState('speaking','SPEAKING','');
+    speak(msg, ()=> listenForQuestion());
+  }
+}
+
+// ---------- UI wiring ----------
+startBtn.addEventListener('click', async ()=>{
+  const enteredKey = apiKeyInput.value.trim();
+  if(enteredKey){
+    apiKey = enteredKey;
+    localStorage.setItem('friday_api_key', apiKey);
+  }
+  if(micActive){
+    // reopened from the settings gear while already running — just close it
+    startOverlay.style.display = 'none';
+    return;
+  }
+  if(!SpeechRecognition){
+    startErr.style.display='block';
+    startErr.textContent = 'Speech recognition is not supported in this browser. Try Chrome on Android.';
+  }
+  try{
+    await initMic();
+    window.speechSynthesis.getVoices();
+    startOverlay.style.display = 'none';
+    setState('idle', 'STANDBY', 'Clap twice to arm the wake listener.');
+  }catch(err){
+    startErr.style.display='block';
+    startErr.textContent = 'Microphone access was blocked. Please allow it and try again.';
+  }
+});
+
+armBtn.addEventListener('click', ()=>{
+  if(state === 'idle'){ clapCount = 2; registerClap(); }
+});
+
+stopBtn.addEventListener('click', ()=>{
+  clearTimeout(armWindowTimer);
+  stopRecognitionSafely();
+  window.speechSynthesis.cancel();
+  conversationHistory = [];
+  setState('idle', 'STANDBY', 'Clap twice to arm the wake listener.');
+});
+
+// ---------- particle sphere visual ----------
+let micLevelForVisual = 0;
+const canvas = document.getElementById('particleCanvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+const N_PARTICLES = 260;
+
+function initParticles(){
+  particles = [];
+  for(let i=0;i<N_PARTICLES;i++){
+    const theta = Math.random()*Math.PI*2;
+    const phi = Math.acos(2*Math.random()-1);
+    particles.push({ theta, phi, r: 1, tw: Math.random()*Math.PI*2 });
+  }
+}
+initParticles();
+
+function resizeCanvas(){
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * devicePixelRatio;
+  canvas.height = rect.height * devicePixelRatio;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+let rotation = 0;
+function drawParticles(){
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+  const cx = w/2, cy = h/2;
+  const baseRadius = Math.min(w,h) * 0.38;
+
+  const speedMul = { idle:0.15, armed:0.45, awake:0.7, thinking:1.3, speaking:1.6 }[state] ?? 0.3;
+  rotation += 0.004 * speedMul + micLevelForVisual*0.01;
+
+  const colorAlphaBase = { idle:0.35, armed:0.6, awake:0.8, thinking:0.9, speaking:1 }[state] ?? 0.4;
+
+  // core glow
+  const glowR = baseRadius * (0.35 + micLevelForVisual*0.25);
+  const grad = ctx.createRadialGradient(cx,cy,0,cx,cy,glowR*2.2);
+  grad.addColorStop(0, `rgba(159,236,255,${0.9*colorAlphaBase})`);
+  grad.addColorStop(0.4, `rgba(63,212,255,${0.35*colorAlphaBase})`);
+  grad.addColorStop(1, 'rgba(63,212,255,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, glowR*2.2, 0, Math.PI*2);
+  ctx.fill();
+
+  // particles on sphere
+  for(const p of particles){
+    const theta = p.theta + rotation;
+    const x3 = Math.sin(p.phi)*Math.cos(theta);
+    const y3 = Math.cos(p.phi);
+    const z3 = Math.sin(p.phi)*Math.sin(theta);
+    const scale = (z3+1.6)/2.6; // depth 0..1ish
+    const x = cx + x3*baseRadius*scale;
+    const y = cy + y3*baseRadius*scale;
+    const size = (0.6 + scale*1.8) * (devicePixelRatio*0.7);
+    const tw = 0.5 + 0.5*Math.sin(p.tw + Date.now()/500);
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(159,236,255,${(0.25+scale*0.65)*colorAlphaBase*tw})`;
+    ctx.arc(x, y, size, 0, Math.PI*2);
+    ctx.fill();
+  }
+  requestAnimationFrame(drawParticles);
+}
+drawParticles();
+</script>
+</body>
+</html>
